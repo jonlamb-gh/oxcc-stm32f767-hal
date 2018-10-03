@@ -23,5 +23,5 @@ at your option.
 
 [reference manual]: https://www.st.com/content/ccc/resource/technical/document/reference_manual/group0/96/8b/0d/ec/16/22/43/71/DM00224583/files/DM00224583.pdf/jcr:content/translations/en.DM00224583.pdf
 [datasheet]: https://cdn.sparkfun.com/datasheets/Sensors/LightImaging/STM32F765VI.pdf
-[stm32f7 device crate]: https://github.com/jonlamb-gh/oxcc-stm32f767
+[OxCC stm32f7 device crate]: https://github.com/jonlamb-gh/oxcc-stm32f767
 [stm32f103xx-hal]: https://github.com/japaric/stm32f103xx-hal
