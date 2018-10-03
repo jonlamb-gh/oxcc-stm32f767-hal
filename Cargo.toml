@@ -1,0 +1,32 @@
+[package]
+name = "oxcc-stm32f767-hal"
+version = "0.1.0"
+authors = ["Jon Lamb"]
+repository = "https://github.com/jonlamb-gh/oxcc-stm32f767-hal"
+description = "HAL for the STM32F767ZIT6 microcontroller"
+keywords = ["no-std", "arm", "cortex-m", "stm32"]
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+cortex-m = "0.5.7"
+nb = "0.1.1"
+embedded_types = "0.3.2"
+
+[dependencies.embedded-hal]
+features = ["unproven"]
+version = "0.2.1"
+
+[dependencies.oxcc-stm32f767]
+version = "0.1.0"
+features = ["rt"]
+
+[dependencies.void]
+default-features = false
+version = "1.0.2"
+
+[dependencies.cast]
+default-features = false
+version = "0.2.2"
+
+[features]
+rt = ["oxcc-stm32f767/rt"]
