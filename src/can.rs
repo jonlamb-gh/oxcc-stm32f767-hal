@@ -17,7 +17,7 @@ use gpio::AF9;
 use rcc::APB1;
 use stm32f7x7::{can1, CAN1, CAN2};
 
-//use time::Hertz;
+// use time::Hertz;
 
 pub use embedded_types::can::{
     BaseID, CanFrame, DataFrame, ExtendedDataFrame, ExtendedID, RemoteFrame, ID,
