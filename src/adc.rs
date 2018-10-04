@@ -36,6 +36,19 @@ pub enum Prescaler {
     Prescaler8,
 }
 
+/// ADC conversion resolution
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum Resolution {
+    /// minimum 15 ADCCLK cycles
+    Bits12,
+    /// minimum 13 ADCCLK cycles
+    Bits10,
+    /// minimum 11 ADCCLK cycles
+    Bits8,
+    /// minimum 9 ADCCLK cycles
+    Bits6,
+}
+
 impl From<SampleTime> for u8 {
     fn from(s: SampleTime) -> u8 {
         match s {
@@ -76,6 +89,17 @@ impl From<Prescaler> for u8 {
     }
 }
 
+impl From<Resolution> for u8 {
+    fn from(r: Resolution) -> u8 {
+        match r {
+            Resolution::Bits12 => 0b00,
+            Resolution::Bits10 => 0b01,
+            Resolution::Bits8 => 0b10,
+            Resolution::Bits6 => 0b11,
+        }
+    }
+}
+
 pub struct Adc<ADC> {
     adc: ADC,
 }
@@ -86,7 +110,13 @@ macro_rules! hal {
     )+) => {
         $(
 impl Adc<$ADCX> {
-    pub fn $adcX(adc: $ADCX, c_adc: &mut C_ADC, apb: &mut APB2, prescaler: Prescaler) -> Self {
+    pub fn $adcX(
+        adc: $ADCX,
+        c_adc: &mut C_ADC,
+        apb: &mut APB2,
+        prescaler: Prescaler,
+        resolution: Resolution,
+    ) -> Self {
         // reset ADC on ADC1 (master), applies to all
         if $adc_master {
             apb.rstr().modify(|_, w| w.adcrst().set_bit());
@@ -112,8 +142,8 @@ impl Adc<$ADCX> {
             w
                 // disable overrun interrupt
                 .ovrie().clear_bit()
-                // 12-bit resolution
-                .res().bits(0b00)
+                // resolution
+                .res().bits(u8::from(resolution))
                 // disable scan mode
                 .scan().clear_bit()
                 // disable analog watchdog
