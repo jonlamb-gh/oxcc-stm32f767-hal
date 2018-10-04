@@ -1,14 +1,12 @@
-// TODO - this needs a refactor
-// do something similar to PWM here:
-// https://github.com/japaric/stm32f103xx-hal/blob/master/src/pwm.rs
-// - need to enforce that the ADC clock does not exceed 30 MHz
+// TODO:
+// - enforce that the ADC clock does not exceed 30 MHz
 
 use cortex_m;
 use rcc::APB2;
 use stm32f7x7::{ADC1, ADC2, ADC3, C_ADC};
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum AdcSampleTime {
+pub enum SampleTime {
     Cycles3,
     Cycles15,
     Cycles28,
@@ -20,7 +18,7 @@ pub enum AdcSampleTime {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum AdcChannel {
+pub enum Channel {
     Adc123In3,
     Adc123In10,
     Adc123In13,
@@ -31,49 +29,73 @@ pub enum AdcChannel {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum AdcPrescaler {
+pub enum Prescaler {
     Prescaler2,
     Prescaler4,
     Prescaler6,
     Prescaler8,
 }
 
-impl From<AdcSampleTime> for u8 {
-    fn from(s: AdcSampleTime) -> u8 {
+/// ADC conversion resolution
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum Resolution {
+    /// minimum 15 ADCCLK cycles
+    Bits12,
+    /// minimum 13 ADCCLK cycles
+    Bits10,
+    /// minimum 11 ADCCLK cycles
+    Bits8,
+    /// minimum 9 ADCCLK cycles
+    Bits6,
+}
+
+impl From<SampleTime> for u8 {
+    fn from(s: SampleTime) -> u8 {
         match s {
-            AdcSampleTime::Cycles3 => 0b000,
-            AdcSampleTime::Cycles15 => 0b001,
-            AdcSampleTime::Cycles28 => 0b010,
-            AdcSampleTime::Cycles56 => 0b011,
-            AdcSampleTime::Cycles84 => 0b100,
-            AdcSampleTime::Cycles112 => 0b101,
-            AdcSampleTime::Cycles144 => 0b110,
-            AdcSampleTime::Cycles480 => 0b111,
+            SampleTime::Cycles3 => 0b000,
+            SampleTime::Cycles15 => 0b001,
+            SampleTime::Cycles28 => 0b010,
+            SampleTime::Cycles56 => 0b011,
+            SampleTime::Cycles84 => 0b100,
+            SampleTime::Cycles112 => 0b101,
+            SampleTime::Cycles144 => 0b110,
+            SampleTime::Cycles480 => 0b111,
         }
     }
 }
 
-impl From<AdcChannel> for u8 {
-    fn from(c: AdcChannel) -> u8 {
+impl From<Channel> for u8 {
+    fn from(c: Channel) -> u8 {
         match c {
-            AdcChannel::Adc123In3 => 3,
-            AdcChannel::Adc123In10 => 10,
-            AdcChannel::Adc123In13 => 13,
-            AdcChannel::Adc12In9 => 9,
-            AdcChannel::Adc3In9 => 9,
-            AdcChannel::Adc3In15 => 15,
-            AdcChannel::Adc3In8 => 8,
+            Channel::Adc123In3 => 3,
+            Channel::Adc123In10 => 10,
+            Channel::Adc123In13 => 13,
+            Channel::Adc12In9 => 9,
+            Channel::Adc3In9 => 9,
+            Channel::Adc3In15 => 15,
+            Channel::Adc3In8 => 8,
         }
     }
 }
 
-impl From<AdcPrescaler> for u8 {
-    fn from(p: AdcPrescaler) -> u8 {
+impl From<Prescaler> for u8 {
+    fn from(p: Prescaler) -> u8 {
         match p {
-            AdcPrescaler::Prescaler2 => 0b00,
-            AdcPrescaler::Prescaler4 => 0b01,
-            AdcPrescaler::Prescaler6 => 0b10,
-            AdcPrescaler::Prescaler8 => 0b11,
+            Prescaler::Prescaler2 => 0b00,
+            Prescaler::Prescaler4 => 0b01,
+            Prescaler::Prescaler6 => 0b10,
+            Prescaler::Prescaler8 => 0b11,
+        }
+    }
+}
+
+impl From<Resolution> for u8 {
+    fn from(r: Resolution) -> u8 {
+        match r {
+            Resolution::Bits12 => 0b00,
+            Resolution::Bits10 => 0b01,
+            Resolution::Bits8 => 0b10,
+            Resolution::Bits6 => 0b11,
         }
     }
 }
@@ -88,7 +110,13 @@ macro_rules! hal {
     )+) => {
         $(
 impl Adc<$ADCX> {
-    pub fn $adcX(adc: $ADCX, c_adc: &mut C_ADC, apb: &mut APB2, prescaler: AdcPrescaler) -> Self {
+    pub fn $adcX(
+        adc: $ADCX,
+        c_adc: &mut C_ADC,
+        apb: &mut APB2,
+        prescaler: Prescaler,
+        resolution: Resolution,
+    ) -> Self {
         // reset ADC on ADC1 (master), applies to all
         if $adc_master {
             apb.rstr().modify(|_, w| w.adcrst().set_bit());
@@ -114,8 +142,8 @@ impl Adc<$ADCX> {
             w
                 // disable overrun interrupt
                 .ovrie().clear_bit()
-                // 12-bit resolution
-                .res().bits(0b00)
+                // resolution
+                .res().bits(u8::from(resolution))
                 // disable scan mode
                 .scan().clear_bit()
                 // disable analog watchdog
@@ -158,7 +186,7 @@ impl Adc<$ADCX> {
         Adc { adc }
     }
 
-    pub fn read(&self, channel: AdcChannel, sample_time: AdcSampleTime) -> u16 {
+    pub fn read(&self, channel: Channel, sample_time: SampleTime) -> u16 {
         let smpt = u8::from(sample_time);
 
         // single conversion, uses the 1st conversion in the sequence
@@ -170,13 +198,13 @@ impl Adc<$ADCX> {
         // channel 10:18 uses SMPR1
         // channel 0:9 uses SMPR2
         match channel {
-            AdcChannel::Adc123In3 => self.adc.smpr2.write(|w| unsafe { w.smp3().bits(smpt) }),
-            AdcChannel::Adc3In8 => self.adc.smpr2.write(|w| unsafe { w.smp8().bits(smpt) }),
-            AdcChannel::Adc3In9 => self.adc.smpr2.write(|w| w.smp9().bits(smpt)),
-            AdcChannel::Adc12In9 => self.adc.smpr2.write(|w| w.smp9().bits(smpt)),
-            AdcChannel::Adc123In10 => self.adc.smpr1.write(|w| unsafe { w.smp10().bits(smpt) }),
-            AdcChannel::Adc123In13 => self.adc.smpr1.write(|w| unsafe { w.smp13().bits(smpt) }),
-            AdcChannel::Adc3In15 => self.adc.smpr1.write(|w| unsafe { w.smp15().bits(smpt) }),
+            Channel::Adc123In3 => self.adc.smpr2.write(|w| unsafe { w.smp3().bits(smpt) }),
+            Channel::Adc3In8 => self.adc.smpr2.write(|w| unsafe { w.smp8().bits(smpt) }),
+            Channel::Adc3In9 => self.adc.smpr2.write(|w| w.smp9().bits(smpt)),
+            Channel::Adc12In9 => self.adc.smpr2.write(|w| w.smp9().bits(smpt)),
+            Channel::Adc123In10 => self.adc.smpr1.write(|w| unsafe { w.smp10().bits(smpt) }),
+            Channel::Adc123In13 => self.adc.smpr1.write(|w| unsafe { w.smp13().bits(smpt) }),
+            Channel::Adc3In15 => self.adc.smpr1.write(|w| unsafe { w.smp15().bits(smpt) }),
         };
 
         // start conversion
