@@ -1,6 +1,6 @@
 [package]
 name = "oxcc-stm32f767-hal"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Jon Lamb"]
 repository = "https://github.com/jonlamb-gh/oxcc-stm32f767-hal"
 description = "HAL for the STM32F767ZIT6 microcontroller"
