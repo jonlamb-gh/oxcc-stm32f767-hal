@@ -235,14 +235,20 @@ impl CFGR {
             // configure main PLL clock source
             rcc.pllcfgr.modify(|_, w| unsafe {
                 w
-                // HSE PLL source
-                .pllsrc().set_bit()
-                .pllm().bits(pll_m)
-                .plln().bits(pll_n)
-                // PLLP_DIV2
-                .pllp().bits(0b00)
-                .pllq().bits(pll_q)
-                .pllr().bits(pll_r)
+                    // HSE PLL source
+                    .pllsrc()
+                    .set_bit()
+                    .pllm()
+                    .bits(pll_m)
+                    .plln()
+                    .bits(pll_n)
+                    // PLLP_DIV2
+                    .pllp()
+                    .bits(0b00)
+                    .pllq()
+                    .bits(pll_q)
+                    .pllr()
+                    .bits(pll_r)
             });
 
             // enable main PLL
@@ -276,10 +282,12 @@ impl CFGR {
 
         rcc.cfgr.modify(|_, w| unsafe {
             w
-            // PCLK1, DIV4
-            .ppre1().bits(0b101)
-            // PCLK2, DIV2
-            .ppre2().bits(0b100)
+                // PCLK1, DIV4
+                .ppre1()
+                .bits(0b101)
+                // PCLK2, DIV2
+                .ppre2()
+                .bits(0b100)
         });
 
         // TODO
@@ -380,7 +388,7 @@ impl CFGR {
             // use PLL as source
             rcc.cfgr
                 .modify(|_, w| unsafe { w.hpre().bits(pllmul_bits) });
-            //rcc.cfgr.write(|w| unsafe { w.pllmul().bits(pllmul_bits) });
+            // rcc.cfgr.write(|w| unsafe { w.pllmul().bits(pllmul_bits) });
 
             // Enable PLL
             rcc.cr.write(|w| w.pllon().set_bit());

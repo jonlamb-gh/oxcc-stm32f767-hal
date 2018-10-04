@@ -3,12 +3,12 @@
 use cast::{u16, u32};
 use hal::timer::{CountDown, Periodic};
 use nb;
-//use stm32f7x7::{TIM10, TIM11, TIM12, TIM13, TIM14, TIM2, TIM3, TIM4, TIM5,
+// use stm32f7x7::{TIM10, TIM11, TIM12, TIM13, TIM14, TIM2, TIM3, TIM4, TIM5,
 // TIM6, TIM7, TIM9};
 use stm32f7x7::{TIM2, TIM3, TIM4, TIM5, TIM6, TIM7};
 use void::Void;
 
-//use rcc::{Clocks, APB1, APB2};
+// use rcc::{Clocks, APB1, APB2};
 use rcc::{Clocks, APB1};
 use time::Hertz;
 
