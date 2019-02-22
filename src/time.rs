@@ -5,19 +5,19 @@ use cortex_m::peripheral::DWT;
 use rcc::Clocks;
 
 /// Bits per second
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct Bps(pub u32);
 
 /// Hertz
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct Hertz(pub u32);
 
 /// KiloHertz
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct KiloHertz(pub u32);
 
 /// MegaHertz
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
 pub struct MegaHertz(pub u32);
 
 /// Extension trait that adds convenience methods to the `u32` type

@@ -16,6 +16,7 @@ pub mod can;
 pub mod delay;
 pub mod flash;
 pub mod gpio;
+pub mod i2c;
 pub mod iwdg;
 pub mod prelude;
 pub mod rcc;
