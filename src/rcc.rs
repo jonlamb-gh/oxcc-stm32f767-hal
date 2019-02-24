@@ -1,9 +1,6 @@
 //! Reset and Clock Control
 #![allow(dead_code)]
 
-use core::cmp;
-
-use cast::u32;
 use stm32f7x7::{rcc, RCC};
 
 use flash::ACR;
@@ -309,21 +306,30 @@ impl CFGR {
     /// Freezes the clock configuration, making it effective
     /// TODO - this needs work
     pub fn freeze(self, acr: &mut ACR) -> Clocks {
-        let pllmul = (2 * self.sysclk.unwrap_or(HSI)) / HSI;
-        let pllmul = cmp::min(cmp::max(pllmul, 2), 16);
-        let pllmul_bits = if pllmul == 2 {
-            None
-        } else {
-            Some(pllmul as u8 - 2)
-        };
+        let rcc = unsafe { &*RCC::ptr() };
 
-        let sysclk = pllmul * HSI / 2;
+        let sysclk = self.sysclk.unwrap_or(HSI);
+        let hclk = self.hclk.unwrap_or(HSI);
 
-        assert!(sysclk <= 72_000_000);
+        assert!(sysclk >= HSI);
+        assert!(hclk <= sysclk);
 
-        let hpre_bits = self
-            .hclk
-            .map(|hclk| match sysclk / hclk {
+        if sysclk == HSI && hclk == sysclk {
+            // use HSI as source and run everything at the same speed
+            rcc.cfgr.modify(|_, w| unsafe {
+                w.ppre2().bits(0).ppre1().bits(0).hpre().bits(0).sw().hsi()
+            });
+
+            Clocks {
+                hclk: Hertz(hclk),
+                pclk1: Hertz(hclk),
+                pclk2: Hertz(hclk),
+                sysclk: Hertz(sysclk),
+                ppre1: 1,
+                ppre2: 1,
+            }
+        } else if sysclk == HSI && hclk < sysclk {
+            let hpre_bits = match sysclk / hclk {
                 0 => unreachable!(),
                 1 => 0b0111,
                 2 => 0b1000,
@@ -334,101 +340,146 @@ impl CFGR {
                 96...191 => 0b1101,
                 192...383 => 0b1110,
                 _ => 0b1111,
-            }).unwrap_or(0b0111);
+            };
 
-        let hclk = sysclk / (1 << (hpre_bits - 0b0111));
+            // Use HSI as source and run everything at the same speed
+            rcc.cfgr.modify(|_, w| unsafe {
+                w.ppre2()
+                    .bits(0)
+                    .ppre1()
+                    .bits(0)
+                    .hpre()
+                    .bits(hpre_bits)
+                    .sw()
+                    .hsi()
+            });
 
-        assert!(hclk <= 72_000_000);
+            Clocks {
+                hclk: Hertz(hclk),
+                pclk1: Hertz(hclk),
+                pclk2: Hertz(hclk),
+                sysclk: Hertz(sysclk),
+                ppre1: 1,
+                ppre2: 1,
+            }
+        } else {
+            assert!(sysclk <= 216_000_000 && sysclk >= 24_000_000);
 
-        let ppre1_bits = self
-            .pclk1
-            .map(|pclk1| match hclk / pclk1 {
-                0 => unreachable!(),
-                1 => 0b011,
-                2 => 0b100,
-                3...5 => 0b101,
-                6...11 => 0b110,
-                _ => 0b111,
-            }).unwrap_or(0b011);
+            // We're not diving down the hclk so it'll be the same as sysclk
+            let hclk = sysclk;
 
-        let ppre1 = 1 << (ppre1_bits - 0b011);
-        let pclk1 = hclk / u32(ppre1);
+            let (pllm, plln, pllp) = if sysclk >= 96_000_000 {
+                // Input divisor from HSI clock, must result in less than 2MHz
+                let pllm = 16;
 
-        assert!(pclk1 <= 45_000_000);
+                // Main scaler, must result in >= 192MHz and <= 432MHz, min 50, max 432
+                let plln = (sysclk / 1_000_000) * 2;
 
-        let ppre2_bits = self
-            .pclk2
-            .map(|pclk2| match hclk / pclk2 {
-                0 => unreachable!(),
-                1 => 0b011,
-                2 => 0b100,
-                3...5 => 0b101,
-                6...11 => 0b110,
-                _ => 0b111,
-            }).unwrap_or(0b011);
+                // Sysclk output divisor, must result in >= 24MHz and <= 216MHz
+                // needs to be the equivalent of 2, 4, 6 or 8
+                let pllp = 0;
 
-        let ppre2 = 1 << (ppre2_bits - 0b011);
-        let pclk2 = hclk / u32(ppre2);
+                (pllm, plln, pllp)
+            } else if sysclk <= 54_000_000 {
+                // Input divisor from HSI clock, must result in less than 2MHz
+                let pllm = 16;
 
-        assert!(pclk2 <= 90_000_000);
+                // Main scaler, must result in >= 192MHz and <= 432MHz, min 50, max 432
+                let plln = (sysclk / 1_000_000) * 8;
 
-        // adjust flash wait states
-        acr.acr().write(|w| {
-            w.latency().bits(if sysclk <= 24_000_000 {
-                0b000
-            } else if sysclk <= 48_000_000 {
-                0b001
+                // Sysclk output divisor, must result in >= 24MHz and <= 216MHz
+                // needs to be the equivalent of 2, 4, 6 or 8
+                let pllp = 0b11;
+
+                (pllm, plln, pllp)
             } else {
-                0b010
-            })
-        });
+                // Input divisor from HSI clock, must result in less than 2MHz
+                let pllm = 16;
 
-        let rcc = unsafe { &*RCC::ptr() };
-        if let Some(pllmul_bits) = pllmul_bits {
+                // Main scaler, must result in >= 192MHz and <= 432MHz, min 50, max 432
+                let plln = (sysclk / 1_000_000) * 4;
+
+                // Sysclk output divisor, must result in >= 24MHz and <= 216MHz
+                // needs to be the equivalent of 2, 4, 6 or 8
+                let pllp = 0b1;
+
+                (pllm, plln, pllp)
+            };
+
+            let ppre2_bits = if sysclk > 108_000_000 { 0b100 } else { 0 };
+            let ppre1_bits = if sysclk > 108_000_000 {
+                0b101
+            } else if sysclk > 54_000_000 {
+                0b100
+            } else {
+                0
+            };
+
+            // Calculate real divisor
+            let ppre1 = 1 << (ppre1_bits - 0b011);
+            let ppre2 = 1 << (ppre2_bits - 0b011);
+
+            // Calculate new bus clocks
+            let pclk1 = hclk / ppre1;
+            let pclk2 = hclk / ppre2;
+
+            // Adjust flash wait states
+            acr.acr().modify(|_, w| {
+                w.latency().bits(if sysclk <= 30_000_000 {
+                    0b0000
+                } else if sysclk <= 60_000_000 {
+                    0b0001
+                } else if sysclk <= 90_000_000 {
+                    0b0010
+                } else if sysclk <= 120_000_000 {
+                    0b0011
+                } else if sysclk <= 150_000_000 {
+                    0b0100
+                } else if sysclk <= 180_000_000 {
+                    0b0101
+                } else if sysclk <= 210_000_000 {
+                    0b0110
+                } else {
+                    0b0111
+                })
+            });
+
             // use PLL as source
-            rcc.cfgr
-                .modify(|_, w| unsafe { w.hpre().bits(pllmul_bits) });
-            // rcc.cfgr.write(|w| unsafe { w.pllmul().bits(pllmul_bits) });
+            rcc.pllcfgr.write(|w| unsafe {
+                w.pllm()
+                    .bits(pllm)
+                    .plln()
+                    .bits(plln as u16)
+                    .pllp()
+                    .bits(pllp)
+            });
 
             // Enable PLL
             rcc.cr.write(|w| w.pllon().set_bit());
 
+            // Wait for PLL to stabilise
             while rcc.cr.read().pllrdy().bit_is_clear() {}
 
-            // SW: PLL selected as system clock
+            // Set scaling factors and switch clock to PLL
             rcc.cfgr.modify(|_, w| unsafe {
                 w.ppre2()
                     .bits(ppre2_bits)
                     .ppre1()
                     .bits(ppre1_bits)
                     .hpre()
-                    .bits(hpre_bits)
+                    .bits(0)
                     .sw()
-                    .bits(0b10)
+                    .pll()
             });
-        } else {
-            // use HSI as source
 
-            // SW: HSI selected as system clock
-            rcc.cfgr.write(|w| unsafe {
-                w.ppre2()
-                    .bits(ppre2_bits)
-                    .ppre1()
-                    .bits(ppre1_bits)
-                    .hpre()
-                    .bits(hpre_bits)
-                    .sw()
-                    .bits(0b00)
-            });
-        }
-
-        Clocks {
-            hclk: Hertz(hclk),
-            pclk1: Hertz(pclk1),
-            pclk2: Hertz(pclk2),
-            ppre1,
-            ppre2,
-            sysclk: Hertz(sysclk),
+            Clocks {
+                hclk: Hertz(hclk),
+                pclk1: Hertz(pclk1),
+                pclk2: Hertz(pclk2),
+                sysclk: Hertz(sysclk),
+                ppre1: ppre1 as _,
+                ppre2: ppre2 as _,
+            }
         }
     }
 }
